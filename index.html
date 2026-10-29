@@ -157,6 +157,12 @@
   .mat::before { content: ""; position: absolute; inset: 7px; border-radius: 20px; border: 2px dashed rgba(240,200,120,.55); pointer-events: none; }
   .mat-title { position: relative; display: flex; justify-content: space-between; align-items: center; font-size: 15px; color: #F3C97A; letter-spacing: 1px; margin: 2px 4px 0; }
   .mat-title .left { opacity: .95; }
+  .mat-title { gap: 8px; }
+  .mat-title > * { white-space: nowrap; }
+  @media (max-width: 400px) { #multTag { display: none; } }
+  .timer { flex: none; min-width: 56px; height: 32px; margin: -4px 0; padding: 0 10px; border-radius: 999px; background: rgba(255,243,218,.95); color: var(--ink); font-size: 19px; display: flex; align-items: center; justify-content: center; gap: 4px; box-shadow: 0 2px 0 #5E1813; }
+  .timer.hurry { background: #FFE08A; color: var(--accent); animation: tick .5s ease-in-out infinite alternate; }
+  @keyframes tick { to { transform: scale(1.12); } }
   .mat .msg { color: #FBE3BE; }
   .mat .msg b { color: #fff; }
   .gauge { position: relative; margin: 6px 4px 12px; }
@@ -413,7 +419,7 @@
       </div>
 
       <div class="mat">
-        <div class="mat-title"><span class="left">윷판 · <span id="roomTag"></span></span><span id="multTag"></span></div>
+        <div class="mat-title"><span class="left">윷판 · <span id="roomTag"></span></span><span class="timer hidden" id="timer"></span><span id="multTag"></span></div>
         <div class="sticks" id="sticks"></div>
         <div class="gauge" id="gauge"></div>
         <div class="msg" id="msg"></div>
@@ -600,7 +606,7 @@ function applyThrow(S, g, by) {
   S.throwsLeft--;
   if (!r.nak) { S.results.push(r.v); if (r.v >= 4) S.throwsLeft++; }
   S.sticks = { faces: r.faces, nak: !!r.nak };
-  S.ev = { n: S.ev.n + 1, type: "throw", v: r.nak ? 0 : r.v, nak: !!r.nak, faces: r.faces, zone: r.zone ? r.zone.label : "", g: Math.round(g * 10) / 10, by: by || "" };
+  S.ev = { n: S.ev.n + 1, type: "throw", v: r.nak ? 0 : r.v, nak: !!r.nak, faces: r.faces, zone: r.zone ? r.zone.label : "", g: Math.round(g * 10) / 10, by: by || "", auto: by === "auto" };
   settle(S);
 }
 function applyMove(S, ri, g, by) {
@@ -608,7 +614,7 @@ function applyMove(S, ri, g, by) {
   const movers = g === WAIT ? [leadOf(S, t, WAIT)] : stackAt(S, t, g);
   const plan = simulate(movers[0].pos, movers[0].hist, v);
   S.results.splice(ri, 1);
-  const ev = { n: S.ev.n + 1, type: "move", team: t, ids: movers.map(p => p.id), from: movers[0].pos, path: plan.path, v, by: by || "" };
+  const ev = { n: S.ev.n + 1, type: "move", team: t, ids: movers.map(p => p.id), from: movers[0].pos, path: plan.path, v, by: by || "", auto: by === "auto" };
   movers.forEach(p => { p.pos = plan.dest; p.hist = [...plan.hist]; });
   if (plan.dest === GOAL) { movers.forEach(p => p.hist = []); ev.goal = movers.length; }
   else {
@@ -1024,7 +1030,7 @@ function newGameState() {
   const cfg = room.meta.cfg;
   const teams = room.teams.map((t, i) => ({ name: t.name || ANIMAL_NAME[t.animal], animal: t.animal, ai: !!t.ai, color: TEAM_COLORS[i] }));
   const S = { gid: Math.random().toString(36).slice(2, 8), teams, rules: { back: cfg.back, nak: cfg.nak, mult: cfg.mult, sweep: cfg.sweep },
-    pieces: [], turn: 0, throwsLeft: 1, results: [], over: false, winner: -1, sticks: null, ver: 0, rot: teams.map(() => 0), thrower: "", ev: { n: 0, type: "start" } };
+    pieces: [], turn: 0, throwsLeft: 1, results: [], over: false, winner: -1, sticks: null, ver: 0, rot: teams.map(() => 0), thrower: "", ev: { n: 0, type: "start" }, at: now() };
   teams.forEach((_, t) => { for (let i = 0; i < cfg.pieces; i++) S.pieces.push({ id: `${t}-${i}`, team: t, pos: WAIT, hist: [] }); });
   S.thrower = pickThrower(S, 0);
   return S;
@@ -1048,7 +1054,7 @@ async function commit(fn) {
     if (!cur) return;
     const S = norm(cur);
     if (S.ver !== ver || S.over) return;
-    fn(S); S.ver = ver + 1;
+    fn(S); S.ver = ver + 1; S.at = now();
     return S;
   }).catch(e => { console.error(e); return { committed: false }; });
   return r.committed;
@@ -1075,6 +1081,7 @@ async function transition(prev, S) {
     return;
   }
   ui.busy = true; ui.group = null;
+  if (ev.auto) toast(`⏱ 시간 초과! ${ev.type === "throw" ? "자동으로 던졌어요" : "컴퓨터가 대신 움직였어요"}`);
   if (ev.type === "throw") {
     cancelAnimationFrame(peekRaf);
     G = prev;
@@ -1205,7 +1212,7 @@ function render(keepMsg) {
   if (!G) return;
   const T = G.teams[G.turn], c = controller(G), mine = myTurn();
   const whoName = c.ai ? (T.ai ? "컴퓨터" : "컴퓨터가 대신") : c.waiting ? "다시 들어오길 기다리는 중" : nameOf(c.uid);
-  $("#multTag").textContent = `게이지 ×${G.rules.mult}`;
+  $("#multTag").textContent = `효과 ×${G.rules.mult}`;
   $("#roomTag").textContent = `${room.code}번 방`;
   const chip = $("#turnChip");
   chip.classList.toggle("mine", mine);
@@ -1592,6 +1599,39 @@ function confetti(color) {
   document.body.appendChild(box);
   setTimeout(() => box.remove(), 4500);
 }
+
+/* ════════ 차례 시간 15초 ════════
+   마지막 기록(S.at)부터 잰다. 장면 보여 주는 시간만큼은 더 준다.
+   시간이 지나면 차례인 기기가 자동으로 던지거나(바늘 아무 데) 컴퓨터처럼 골라 움직이고,
+   그 기기가 잠들어 있으면 방 관리 담당 기기가 5초 뒤 대신한다. */
+const TURN_MS = 15000, ANIM_PAD = 2500, SUP_PAD = 5000, HOLD_MAX = 15000;
+function turnLeft() {
+  if (!G || G.over || !G.at || !room.meta || room.meta.status !== "playing") return null;
+  const c = controller(G);
+  if (c.ai || c.waiting || !c.uid) return null;
+  return G.at + ANIM_PAD + TURN_MS - now();
+}
+let autoBusy = false;
+setInterval(async () => {
+  const el = $("#timer"), left = turnLeft();
+  if (left === null || proc) { el.classList.add("hidden"); return; }
+  const sec = Math.max(0, Math.ceil(left / 1000));
+  el.classList.toggle("hidden", sec > TURN_MS / 1000);
+  el.classList.toggle("hurry", sec <= 5);
+  el.textContent = `⏱ ${sec}`;
+  if (left > 0 || autoBusy || ui.busy) return;
+  const h = room.live.hold;
+  if ((hold || (h && h.uid !== "ai")) && now() - (h ? h.t0 : now()) < HOLD_MAX) return;   // 바늘 보는 중이면 조금 더 기다린다
+  const c = controller(G);
+  if (!(c.uid === me.uid || (supervisor() === me.uid && left < -SUP_PAD))) return;
+  autoBusy = true;
+  try {
+    if (hold) { cancelAnimationFrame(hold.raf); hold = null; $("#actBtn").classList.remove("holding"); }
+    if (G.throwsLeft > 0) await commit(S => applyThrow(S, Math.random() * 100, "auto"));
+    else { const m = aiChoose(G); if (m) await commit(S => applyMove(S, m.ri, m.g, "auto")); }
+    await db.set(R("live/hold"), null);
+  } finally { autoBusy = false; }
+}, 250);
 
 // 접속 상태가 바뀌면(누가 나가고 들어오면) 담당이 바뀔 수 있으니 다시 살핀다
 setInterval(() => { if (G && room.meta && room.meta.status === "playing" && !proc && !ui.busy) afterView(); }, 5000);
