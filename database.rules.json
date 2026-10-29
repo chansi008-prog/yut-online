@@ -1,0 +1,29 @@
+{
+  "rules": {
+    "rooms": {
+      ".indexOn": ["meta/created"],
+      ".read": "auth != null && query.orderByChild === 'meta/created' && query.endAt <= now - 86400000",
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.child('meta/host').val() === auth.uid) || (data.exists() && !newData.exists() && (data.child('meta/host').val() === auth.uid || data.child('meta/created').val() < now - 86400000)))",
+        ".validate": "$code.matches(/^[0-9]{4,8}$/)",
+        "meta":  { ".write": "auth != null && data.parent().child('members').child(auth.uid).child('name').exists()" },
+        "teams": { ".write": "auth != null && data.parent().child('members').child(auth.uid).child('name').exists()" },
+        "game":  { ".write": "auth != null && data.parent().child('members').child(auth.uid).child('name').exists()" },
+        "live":  { ".write": "auth != null && data.parent().child('members').child(auth.uid).child('name').exists()" },
+        "react": {
+          "$id": {
+            ".write": "auth != null && !data.exists() && root.child('rooms').child($code).child('members').child(auth.uid).child('name').exists()",
+            ".validate": "newData.child('uid').val() === auth.uid && newData.child('i').isNumber() && newData.child('i').val() >= 0 && newData.child('i').val() < 20"
+          }
+        },
+        "members": {
+          "$uid": {
+            ".write": "auth != null && ($uid === auth.uid || root.child('rooms').child($code).child('meta/host').val() === auth.uid)",
+            "name": { ".validate": "newData.isString() && newData.val().length <= 12" }
+          }
+        }
+      }
+    }
+  }
+}
