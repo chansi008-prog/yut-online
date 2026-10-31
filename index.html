@@ -105,6 +105,7 @@
   @media (min-width: 700px) and (orientation: portrait) {
     .side { display: grid; grid-template-columns: 1.15fr 1fr; align-items: start; }
     .side .topbar { grid-column: 1 / -1; }
+    .side .rankbar { grid-column: 1 / -1; }
     .game-grid .board-wrap { width: min(100%, calc(100dvh - 520px)); margin: 0 auto; }
   }
   @media (min-width: 760px) and (orientation: landscape) {
@@ -224,6 +225,14 @@
   @keyframes bob2 { 50% { transform: translateY(-3px); } }
   .tcard .goal { font-size: 13px; color: var(--soft); }
   .tcard .goal b { color: var(--ink); font-weight: 400; }
+
+  /* 지금 순위: 숫자 + 그림만 작게 */
+  .rankbar { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+  .rk { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px 2px 4px; border-radius: 999px; background: var(--card); box-shadow: 0 2px 0 var(--line); font-size: 17px; line-height: 1; }
+  .rk b { font-weight: 400; min-width: 16px; text-align: center; color: var(--soft); }
+  .rk img { width: 28px; height: 28px; }
+  .rk.top { background: #FFF1C9; }
+  .rk.top b { color: #B07A00; }
 
   /* ───── 시트 / 오버레이 ───── */
   .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 100; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn .2s; }
@@ -418,6 +427,8 @@
         <button class="icon-btn" id="menuBtn" aria-label="메뉴">☰</button>
       </div>
 
+      <div class="rankbar" id="rankbar"></div>
+
       <div class="mat">
         <div class="mat-title"><span class="left">윷판 · <span id="roomTag"></span></span><span class="timer hidden" id="timer"></span><span id="multTag"></span></div>
         <div class="sticks" id="sticks"></div>
@@ -491,7 +502,7 @@ const distToGoal = (pos, hist) => simulate(pos, hist, 40).path.length;
 
 const YUT_NAME = { "-1": "빽도", 1: "도", 2: "개", 3: "걸", 4: "윷", 5: "모" };
 const TEAM_COLORS = ["#F0675F", "#5B8DEF", "#4DB37E", "#F2B630"];
-// 말 그림: Microsoft Fluent Emoji 3D (MIT). 헬멧은 직접 그림, 고양이는 뱅갈 무늬로 다시 칠함
+// 말 그림: Microsoft Fluent Emoji 3D (MIT). 헬멧은 직접 그림, 고양이는 뱅갈 무늬, 소는 빨간 황소 + 노란 해로 다시 칠함
 const ANIMALS = [
   ["mouse", "쥐"], ["cow", "소"], ["tiger", "호랑이"], ["rabbit", "토끼"], ["dragon", "용"], ["snake", "뱀"],
   ["horse", "말"], ["sheep", "양"], ["monkey", "원숭이"], ["rooster", "닭"], ["dog", "강아지"], ["pig", "돼지"],
@@ -1131,7 +1142,7 @@ function afterView() {
   if (mine && !ui.lastMine) { buzz([30, 60, 30]); sfx.pop(); }
   ui.lastMine = mine;
   clearTimeout(ui.aiTimer);
-  if (iRunAI()) ui.aiTimer = setTimeout(aiStep, 900);
+  if (iRunAI()) ui.aiTimer = setTimeout(aiStep, 350);
 }
 async function aiStep() {
   if (!iRunAI() || ui.busy || proc) return;
@@ -1140,7 +1151,7 @@ async function aiStep() {
     if (G.throwsLeft > 0) {
       const W = G.rules.sweep || 1000;
       const aim = Math.random() < .5 ? [51, 82][Math.floor(Math.random() * 2)] + (Math.random() * 10 - 5) : Math.random() * 88;
-      const total = W * 2 * (1 + Math.floor(Math.random() * 2)) + aim / 100 * W;
+      const total = (aim / 100 + (Math.random() < .3 ? 2 : 0)) * W;   // 대개 한 번에, 가끔 한 바퀴 더
       await db.set(R("live/hold"), { uid: "ai", t0: now() });
       await sleep(total);
       const g = gaugeAt(G, total);
@@ -1151,7 +1162,7 @@ async function aiStep() {
       const m = aiChoose(G);
       if (m) {
         await db.set(R("live/pick"), { ri: m.ri, g: m.g, ver: G.ver });
-        await sleep(800);
+        await sleep(350);
         ui.busy = false;
         await commit(S => applyMove(S, m.ri, m.g, ""));
       }
@@ -1301,6 +1312,8 @@ function render(keepMsg) {
   else if (choices.includes(WAIT)) { btn.textContent = "새 말 올리기"; btn.disabled = false; }
   else { btn.textContent = "말을 골라 주세요"; btn.disabled = true; }
 
+  renderRank();
+
   // 팀 카드
   const tw = $("#teams");
   tw.style.setProperty("--n", G.teams.length);
@@ -1326,6 +1339,18 @@ function render(keepMsg) {
   }).join("");
   const ws = watchers();
   $("#watchBar").textContent = ws.length ? `👀 관전 ${ws.length}명: ${ws.map(m => m.name).join(", ")}` : "";
+}
+// 지금 순위: 골인한 말이 많을수록, 같으면 남은 칸이 적을수록 앞. 똑같으면 같은 등수
+function standings() {
+  const arr = G.teams.map((tm, t) => {
+    const ps = piecesOf(G, t);
+    return { t, tm, done: ps.filter(p => p.pos === GOAL).length, dist: ps.reduce((a, p) => a + (p.pos === GOAL ? 0 : distToGoal(p.pos, p.hist)), 0) };
+  }).sort((a, b) => b.done - a.done || a.dist - b.dist);
+  arr.forEach((r, i) => { const q = arr[i - 1]; r.rank = q && q.done === r.done && q.dist === r.dist ? q.rank : i + 1; });
+  return arr;
+}
+function renderRank() {
+  $("#rankbar").innerHTML = standings().map(r => `<span class="rk ${r.rank === 1 ? "top" : ""}" title="${esc(r.tm.name)}"><b>${r.rank}</b>${ani(r.tm.animal)}</span>`).join("");
 }
 function setMsg(h) { $("#msg").innerHTML = h; }
 function toast(text) {
