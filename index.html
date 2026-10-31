@@ -105,7 +105,6 @@
   @media (min-width: 700px) and (orientation: portrait) {
     .side { display: grid; grid-template-columns: 1.15fr 1fr; align-items: start; }
     .side .topbar { grid-column: 1 / -1; }
-    .side .rankbar { grid-column: 1 / -1; }
     .game-grid .board-wrap { width: min(100%, calc(100dvh - 520px)); margin: 0 auto; }
   }
   @media (min-width: 760px) and (orientation: landscape) {
@@ -226,13 +225,14 @@
   .tcard .goal { font-size: 13px; color: var(--soft); }
   .tcard .goal b { color: var(--ink); font-weight: 400; }
 
-  /* 지금 순위: 숫자 + 그림만 작게 */
-  .rankbar { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
-  .rk { display: inline-flex; align-items: center; gap: 2px; padding: 2px 8px 2px 4px; border-radius: 999px; background: var(--card); box-shadow: 0 2px 0 var(--line); font-size: 17px; line-height: 1; }
-  .rk b { font-weight: 400; min-width: 16px; text-align: center; color: var(--soft); }
-  .rk img { width: 28px; height: 28px; }
-  .rk.top { background: #FFF1C9; }
-  .rk.top b { color: #B07A00; }
+  /* 지금 순위: 윷판 왼쪽에 세로로, 그림 + 작은 등수 */
+  .mat-row { display: flex; gap: 8px; align-items: flex-start; }
+  .mat-row .mat { flex: 1; min-width: 0; }
+  .rankbar { flex: none; width: 44px; display: flex; flex-direction: column; gap: 10px; padding-top: 8px; }
+  .rk { position: relative; display: block; width: 44px; height: 44px; padding: 5px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 30%, #fff, #FFF1DA 70%); box-shadow: inset 0 0 0 3px var(--c), 0 2px 0 var(--line); }
+  .rk b { position: absolute; top: -5px; left: -5px; width: 20px; height: 20px; border-radius: 50%; background: var(--soft); color: #fff; font-weight: 400; font-size: 12px; line-height: 20px; text-align: center; }
+  .rk.top b { background: #E8A400; }
 
   /* ───── 시트 / 오버레이 ───── */
   .scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 100; display: flex; align-items: flex-end; justify-content: center; animation: fadeIn .2s; }
@@ -427,8 +427,8 @@
         <button class="icon-btn" id="menuBtn" aria-label="메뉴">☰</button>
       </div>
 
+      <div class="mat-row">
       <div class="rankbar" id="rankbar"></div>
-
       <div class="mat">
         <div class="mat-title"><span class="left">윷판 · <span id="roomTag"></span></span><span class="timer hidden" id="timer"></span><span id="multTag"></span></div>
         <div class="sticks" id="sticks"></div>
@@ -436,6 +436,7 @@
         <div class="msg" id="msg"></div>
         <div class="results" id="results"></div>
         <button class="big-btn hold-btn" id="actBtn">꾹 눌러서 던지기</button>
+      </div>
       </div>
 
       <div class="teams" id="teams"></div>
@@ -1350,7 +1351,7 @@ function standings() {
   return arr;
 }
 function renderRank() {
-  $("#rankbar").innerHTML = standings().map(r => `<span class="rk ${r.rank === 1 ? "top" : ""}" title="${esc(r.tm.name)}"><b>${r.rank}</b>${ani(r.tm.animal)}</span>`).join("");
+  $("#rankbar").innerHTML = standings().map(r => `<span class="rk ${r.rank === 1 ? "top" : ""}" style="--c:${r.tm.color}" title="${r.rank}등 ${esc(r.tm.name)}"><b>${r.rank}</b>${ani(r.tm.animal)}</span>`).join("");
 }
 function setMsg(h) { $("#msg").innerHTML = h; }
 function toast(text) {
