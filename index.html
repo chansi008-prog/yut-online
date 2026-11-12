@@ -308,6 +308,7 @@
   .lobby-foot { margin: 6px 0 4px; }
   .wait-note { text-align: center; color: var(--soft); font-size: 18px; padding: 16px; background: var(--card); border-radius: 18px; box-shadow: 0 2px 0 var(--line); }
   /* ───── TV + 리모컨 모드 ───── */
+  .sound-hint { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 200; padding: 12px 22px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 20px; box-shadow: 0 6px 20px rgba(0,0,0,.25); animation: bob2 1.2s ease-in-out infinite; }
   .tv-card { margin-top: 12px; }
   .tv-card .big-btn { margin-top: 10px; }
   .tv-wait { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 16px; }
@@ -604,6 +605,11 @@ const store = {
 /* ════════ 효과음 ════════ */
 let sound = store.get("yutol.sound", true), actx = null;
 function ensureAudio() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume?.(); } catch {} }
+const audioOn = () => !!actx && actx.state === "running";
+// 화면 어디든 누르면 소리를 켠다 (아이폰·아이패드는 한 번 눌러야 소리가 남)
+document.addEventListener("pointerdown", () => { const was = audioOn(); ensureAudio(); if (!was) setTimeout(() => { if (audioOn()) document.querySelectorAll(".sound-hint").forEach(e => e.remove()); }, 200); }, true);
+// 앱 버전: 같은 방의 기기끼리 버전이 다르면 오래된 쪽이 새로 고친다
+const APP_VER = 10;
 function tone(freq, dur, type = "sine", vol = .15, when = 0) {
   if (!sound) return;
   try {
@@ -915,7 +921,7 @@ $("#createBtn").onclick = async () => {
     if (ex) await db.remove(`rooms/${code}`);
     const teams = Array.from({ length: ccfg.count }, (_, i) => ({ name: ANIMAL_NAME[DEFAULT_ANIMALS[i]], animal: DEFAULT_ANIMALS[i], ai: false }));
     await db.set(`rooms/${code}`, {
-      meta: { host: me.uid, created: now(), status: "lobby", cfg: { pieces: ccfg.pieces, back: ccfg.back, nak: ccfg.nak, mult: ccfg.mult, sweep: ccfg.sweep, watch: ccfg.watch } },
+      meta: { host: me.uid, created: now(), status: "lobby", appv: APP_VER, cfg: { pieces: ccfg.pieces, back: ccfg.back, nak: ccfg.nak, mult: ccfg.mult, sweep: ccfg.sweep, watch: ccfg.watch } },
       teams,
       members: { [me.uid]: { name: me.name, role: "player", team: 0, joinedAt: now(), online: true } },
     });
@@ -1014,12 +1020,13 @@ function refreshRoom() {
   if (!room.meta) return;
   const mine = myMember();
   if (room.members && Object.keys(room.members).length && (!mine || !mine.name)) return leaveRoom("방에서 나오게 됐어요");
+  if (checkVersion()) return;
   if (room.meta.status === "lobby" && lastStatus === "playing") closeSheetIf("win");   // 다음 판 고르러 가면 승리 화면을 닫는다
   document.body.classList.toggle("tvmode", isTV());
   document.body.classList.toggle("tvscreen", amTVScreen());
   document.body.classList.toggle("remote", amRemote());
   if (isTV()) {
-    if (amTVScreen()) keepAwake();
+    if (amTVScreen()) { keepAwake(); soundHint(); }
     // 다른 휴대폰이 리모컨을 넘겨받으면 이 휴대폰은 첫 화면으로
     if (!amTVScreen() && !amRemote() && myMember() && myMember().role === "remote") return leaveRoom("다른 휴대폰이 리모컨이 됐어요");
     const st = room.meta.status;
@@ -1164,8 +1171,26 @@ async function startGame() {
   await db.update(R(""), { "meta/status": "playing", game: newGameState(), live: null });
 }
 
+/* ════════ 버전 맞추기 ════════ */
+function checkVersion() {
+  const v = room.meta.appv || 0;
+  if (v < APP_VER) { db.set(R("meta/appv"), APP_VER); return false; }          // 내가 더 새 버전: 방에 알린다
+  if (v > APP_VER) {                                                             // 내가 옛 버전: 새로 고친다 (한 번만)
+    const key = `yutol.reload.${v}`;
+    let tried = false; try { tried = sessionStorage.getItem(key) === "1"; sessionStorage.setItem(key, "1"); } catch {}
+    if (!tried) {
+      showScreen("home"); $("#homeErr").textContent = "새 버전으로 바꾸는 중이에요…";
+      location.replace(`${location.pathname}?room=${room.code}&v=${Date.now()}`);
+      return true;
+    }
+    if (!checkVersion.told) { checkVersion.told = true; toast("새 버전이 있어요. 앱을 완전히 닫았다가 다시 열어 주세요"); }
+  }
+  return false;
+}
+
 /* ════════ TV + 리모컨 모드 ════════ */
 $("#tvOpen").onclick = async () => {
+  ensureAudio();
   $("#tvOpen").disabled = true;
   try {
     await db.cleanup().catch(() => {});
@@ -1179,7 +1204,7 @@ $("#tvOpen").onclick = async () => {
     const r = rcfg();
     const teams = r.teams.slice(0, r.count).map(t => ({ name: t.name, animal: t.animal, ai: !!t.ai }));
     await db.set(`rooms/${code}`, {
-      meta: { host: me.uid, created: now(), status: "lobby", mode: "tv", cfg: { pieces: r.pieces, back: r.back, nak: r.nak, mult: r.mult, sweep: r.sweep, watch: true } },
+      meta: { host: me.uid, created: now(), status: "lobby", mode: "tv", appv: APP_VER, cfg: { pieces: r.pieces, back: r.back, nak: r.nak, mult: r.mult, sweep: r.sweep, watch: true } },
       teams,
       members: { [me.uid]: { name: "TV", role: "tv", team: -1, joinedAt: now(), online: true } },
     });
@@ -1189,7 +1214,15 @@ $("#tvOpen").onclick = async () => {
 };
 $("#tvLeave").onclick = () => { if (confirm("TV 화면을 그만할까요? 방이 닫혀요.")) leaveRoom(); };
 let qrFor = "";
+function soundHint() {
+  if (!amTVScreen() || audioOn() || !sound || document.querySelector(".sound-hint")) return;
+  const el = document.createElement("button");
+  el.className = "sound-hint"; el.textContent = "🔈 화면을 한 번 눌러 주세요 (소리 켜기)";
+  el.onclick = () => { ensureAudio(); setTimeout(() => { if (audioOn()) el.remove(); }, 200); };
+  document.body.appendChild(el);
+}
 function renderTvWait() {
+  soundHint();
   $("#tvCode").textContent = room.code;
   if (qrFor !== room.code && window.qrcode) {
     const url = `${location.origin}${location.pathname}?remote=${room.code}`;
@@ -1537,7 +1570,7 @@ function render(keepMsg) {
     else if (isTV() && !mine && !c.ai) setMsg(G.throwsLeft > 0
       ? (room.live.hold ? `<b>${esc(T.name)}</b> 팀이 바늘을 보고 있어요!` : `📱 휴대폰을 <b>${esc(T.name)}</b> 팀에게 넘겨 주세요`)
       : `<b>${esc(T.name)}</b> 팀이 말을 고르고 있어요…`);
-    else if (amRemote() && G.throwsLeft <= 0) setMsg("📱 휴대폰을 다음 팀에 넘겨 주세요 · 말은 심판이 움직여요");
+    else if (amRemote() && G.throwsLeft <= 0) setMsg("📱 휴대폰을 다음 팀에 넘겨 주세요 · 말은 심판(태블릿)이 움직여요");
     else if (amTVScreen() && G.throwsLeft <= 0 && ui.group === null) setMsg(`<b>${esc(T.name)}</b> 팀 말을 골라 움직여 주세요`);
     else if (isTV() && mine && G.throwsLeft > 0 && !G.results.length) setMsg(`<b>${esc(T.name)}</b> 팀 차례! 버튼을 누르고 있다가 바늘이 원하는 칸에 오면 떼세요`);
     else if (c.waiting) setMsg(`<b>${esc(T.name)}</b> 팀이 다시 들어오길 기다리는 중… 조금 뒤엔 컴퓨터가 대신해요`);
@@ -1549,7 +1582,7 @@ function render(keepMsg) {
     else if (ui.group === null) setMsg(G.results.length > 1 ? "쓸 결과를 고르고, 판에서 움직일 말을 누르세요" : "판에서 움직일 말을 누르세요");
     else setMsg(choices.length > 1 ? "표시된 곳으로 갈까요? 다른 말을 눌러 바꿀 수도 있어요" : "표시된 곳으로 갈까요?");
   }
-  if (amRemote() && G.throwsLeft <= 0 && !G.over) { btn.textContent = "말은 심판이 움직여요"; btn.disabled = true; btn.classList.add("hold-btn"); }
+  if (amRemote() && G.throwsLeft <= 0 && !G.over) { btn.textContent = "🤖 알아서 움직이기 (심판 대신)"; btn.disabled = ui.busy || proc; btn.classList.add("hold-btn"); }
   else if (!mine) { btn.textContent = amWatch ? "관전 중" : G.over ? "끝!" : `${c.ai ? "컴퓨터" : whoName || "상대"} 차례예요`; btn.disabled = true; }
   else if (G.throwsLeft > 0) { if (!hold) btn.textContent = G.results.length ? "꾹 눌러서 한 번 더" : "꾹 눌러서 던지기"; btn.disabled = ui.busy || proc; }
   else if (ui.group !== null) { btn.textContent = "이동하기"; btn.disabled = ui.busy || proc; btn.classList.add("jade"); }
@@ -1693,6 +1726,13 @@ async function doMove(ri, g) {
   ui.busy = false;
   if (!ok) render();
 }
+// 리모컨 비상 버튼: 심판 대신 컴퓨터처럼 좋은 수를 골라 움직인다
+async function autoMoveForReferee() {
+  const m = aiChoose(G);
+  if (!m) return;
+  ui.busy = true; render();
+  try { await commit(S => applyMove(S, m.ri, m.g, me.uid)); } finally { ui.busy = false; }
+}
 function pickGroup(g) {
   if (!currentChoices().includes(g)) return;
   if (ui.group === g) return doMove(ui.sel, g);
@@ -1718,6 +1758,7 @@ act.addEventListener("pointerup", endHold);
 act.addEventListener("pointercancel", endHold);
 act.addEventListener("contextmenu", e => e.preventDefault());
 act.addEventListener("click", () => {
+  if (G && amRemote() && G.throwsLeft <= 0 && !G.over && !ui.busy && !proc) return autoMoveForReferee();
   if (!G || !canMove()) return;
   if (ui.group !== null) doMove(ui.sel, ui.group);
   else if (currentChoices().includes(WAIT)) pickGroup(WAIT);

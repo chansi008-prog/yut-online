@@ -1,5 +1,5 @@
 // 윷판 온라인 서비스 워커: 앱 화면 파일만 저장해 둔다 (게임 데이터는 Firebase로 실시간 주고받음)
-const VERSION = "yutol-v9";
+const VERSION = "yutol-v10";
 const CORE = ["./", "index.html", "net.js", "config.js", "qrcode.min.js", "manifest.webmanifest", ...["mouse","cow","tiger","rabbit","dragon","snake","horse","sheep","monkey","rooster","dog","pig","bengal","fox","bear","panda","chick","frog","koala","hamster","penguin","lion","soccer","helmet"].map(k => `animals/${k}.png`), "icons/online-192-v2.png", "icons/online-512-v2.png", "icons/online-touch-v2.png"];
 
 self.addEventListener("install", e => {
@@ -17,7 +17,8 @@ self.addEventListener("fetch", e => {
   const key = e.request.mode === "navigate" ? "index.html" : e.request;
   e.respondWith(caches.open(VERSION).then(async c => {
     try {
-      const r = await fetch(e.request);
+      // 매번 서버에 새 버전이 있는지 확인한다 (GitHub 10분 캐시 때문에 기기끼리 버전이 갈리지 않게)
+      const r = same ? await fetch(e.request.url, { cache: "no-cache", credentials: "same-origin" }) : await fetch(e.request);
       if (r.ok || r.type === "opaque") c.put(key, r.clone());
       return r;
     } catch {
