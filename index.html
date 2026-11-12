@@ -319,9 +319,19 @@
   .tv-status { margin: 14px 0 0; font-size: 21px; }
   .tv-status.ok { color: var(--jade); }
   body.tvmode #reactBtn, body.tvmode .watch-bar, body.tvmode .tcard .people:empty, body.tvmode .turn-chip .me-tag { display: none; }
-  body.tvscreen #actBtn, body.tvscreen #timer { display: none !important; }
+  body.tvscreen #actBtn:not(.tv-show), body.tvscreen #timer { display: none !important; }
+  /* 리모컨 휴대폰: 던지기만 크게 (판·순위·팀 카드는 TV에서 본다) */
+  body.remote #board, body.remote .rankbar, body.remote #teams, body.remote .watch-bar { display: none !important; }
+  body.remote .game-grid { display: block; }
+  body.remote .side { display: flex !important; gap: 14px; }
+  body.remote .turn-chip { padding: 10px 18px 10px 10px; }
+  body.remote .turn-chip .face { width: 64px; height: 64px; }
+  body.remote .turn-chip .txt { font-size: 28px; }
+  body.remote .mat { padding-bottom: 22px; }
+  body.remote .sticks { height: 150px; }
+  body.remote .stick { width: 38px; height: 136px; }
+  body.remote .hold-btn { height: 96px; font-size: 30px; }
   body.tvscreen .mat .msg { font-size: 22px; color: #fff; min-height: 34px; }
-  body.tvscreen .chip { pointer-events: none; }
   .notice { background: #FFF1DA; border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; font-size: 16px; }
 
   .turn-chip.mine { box-shadow: 0 0 0 3px var(--c), 0 2px 0 var(--line); animation: glow 1.4s ease-in-out infinite; }
@@ -832,6 +842,8 @@ function controller(S) {
   return { uid: on[0].uid, ai: false };
 }
 const myTurn = () => G && !G.over && !controller(G).ai && controller(G).uid === me.uid;
+// 말 고르기·이동: 차례인 기기. TV 모드에서는 심판(TV 화면 기기)이 맡고, 휴대폰은 던지기만 하고 바로 넘긴다
+const canMove = () => !!G && !G.over && G.throwsLeft <= 0 && !controller(G).ai && (isTV() ? amTVScreen() : controller(G).uid === me.uid);
 const iRunAI = () => G && !G.over && controller(G).ai && controller(G).uid === me.uid;
 
 function showScreen(id) {
@@ -1437,13 +1449,13 @@ function drawBoard() {
 }
 
 function currentChoices() {
-  if (!G || G.over || ui.busy || proc || !myTurn() || G.throwsLeft > 0 || !G.results.length) return [];
+  if (!G || G.over || ui.busy || proc || !canMove() || !G.results.length) return [];
   return groupsFor(G, G.turn, G.results[ui.sel] ?? G.results[0]);
 }
 
 function render(keepMsg) {
   if (!G) return;
-  const T = G.teams[G.turn], c = controller(G), mine = myTurn();
+  const T = G.teams[G.turn], c = controller(G), mine = myTurn() || canMove();
   const whoName = isTV() ? (c.ai ? "컴퓨터" : c.remoteGone ? "리모컨 연결을 기다리는 중" : "차례")
     : c.ai ? (T.ai ? "컴퓨터" : "컴퓨터가 대신") : c.waiting ? "다시 들어오길 기다리는 중" : nameOf(c.uid);
   $("#multTag").textContent = `효과 ×${G.rules.mult}`;
@@ -1494,7 +1506,7 @@ function render(keepMsg) {
   const marks = $("#markLayer"); marks.innerHTML = "";
   let ri = null, g = null, peek = false;
   if (mine && ui.group !== null) { ri = ui.sel; g = ui.group; }
-  else if (!mine && room.live.pick && room.live.pick.ver === G.ver && !proc) { ri = room.live.pick.ri; g = room.live.pick.g; peek = true; }
+  else if ((!mine || ui.group === null) && room.live.pick && room.live.pick.ver === G.ver && !proc) { ri = room.live.pick.ri; g = room.live.pick.g; peek = true; }
   if (ri !== null && G.results[ri] !== undefined && groupsFor(G, G.turn, G.results[ri]).includes(g)) {
     const plan = planMove(G, G.turn, g, G.results[ri]);
     plan.path.slice(0, -1).forEach(st => { if (P[st]) marks.insertAdjacentHTML("beforeend", `<div class="trail" style="left:${P[st][0]}%;top:${P[st][1]}%"></div>`); });
@@ -1517,6 +1529,7 @@ function render(keepMsg) {
   const btn = $("#actBtn");
   btn.classList.remove("jade");
   btn.classList.toggle("hold-btn", G.throwsLeft > 0 || !mine);
+  btn.classList.toggle("tv-show", amTVScreen() && canMove());   // 심판 태블릿: 말 고를 때만 이동 버튼
   const amWatch = (myMember() || {}).role === "watch";
   if (!keepMsg) {
     if (G.over) setMsg("");
@@ -1524,6 +1537,8 @@ function render(keepMsg) {
     else if (isTV() && !mine && !c.ai) setMsg(G.throwsLeft > 0
       ? (room.live.hold ? `<b>${esc(T.name)}</b> 팀이 바늘을 보고 있어요!` : `📱 휴대폰을 <b>${esc(T.name)}</b> 팀에게 넘겨 주세요`)
       : `<b>${esc(T.name)}</b> 팀이 말을 고르고 있어요…`);
+    else if (amRemote() && G.throwsLeft <= 0) setMsg("📱 휴대폰을 다음 팀에 넘겨 주세요 · 말은 심판이 움직여요");
+    else if (amTVScreen() && G.throwsLeft <= 0 && ui.group === null) setMsg(`<b>${esc(T.name)}</b> 팀 말을 골라 움직여 주세요`);
     else if (isTV() && mine && G.throwsLeft > 0 && !G.results.length) setMsg(`<b>${esc(T.name)}</b> 팀 차례! 버튼을 누르고 있다가 바늘이 원하는 칸에 오면 떼세요`);
     else if (c.waiting) setMsg(`<b>${esc(T.name)}</b> 팀이 다시 들어오길 기다리는 중… 조금 뒤엔 컴퓨터가 대신해요`);
     else if (!mine) {
@@ -1534,7 +1549,8 @@ function render(keepMsg) {
     else if (ui.group === null) setMsg(G.results.length > 1 ? "쓸 결과를 고르고, 판에서 움직일 말을 누르세요" : "판에서 움직일 말을 누르세요");
     else setMsg(choices.length > 1 ? "표시된 곳으로 갈까요? 다른 말을 눌러 바꿀 수도 있어요" : "표시된 곳으로 갈까요?");
   }
-  if (!mine) { btn.textContent = amWatch ? "관전 중" : G.over ? "끝!" : `${c.ai ? "컴퓨터" : whoName || "상대"} 차례예요`; btn.disabled = true; }
+  if (amRemote() && G.throwsLeft <= 0 && !G.over) { btn.textContent = "말은 심판이 움직여요"; btn.disabled = true; btn.classList.add("hold-btn"); }
+  else if (!mine) { btn.textContent = amWatch ? "관전 중" : G.over ? "끝!" : `${c.ai ? "컴퓨터" : whoName || "상대"} 차례예요`; btn.disabled = true; }
   else if (G.throwsLeft > 0) { if (!hold) btn.textContent = G.results.length ? "꾹 눌러서 한 번 더" : "꾹 눌러서 던지기"; btn.disabled = ui.busy || proc; }
   else if (ui.group !== null) { btn.textContent = "이동하기"; btn.disabled = ui.busy || proc; btn.classList.add("jade"); }
   else if (choices.includes(WAIT)) { btn.textContent = "새 말 올리기"; btn.disabled = false; }
@@ -1671,7 +1687,7 @@ async function endHold() {
   if (!ok) render();
 }
 async function doMove(ri, g) {
-  if (ui.busy || proc || !myTurn()) return;
+  if (ui.busy || proc || !canMove()) return;
   ui.busy = true;
   const ok = await commit(S => applyMove(S, ri, g, me.uid));
   ui.busy = false;
@@ -1702,7 +1718,7 @@ act.addEventListener("pointerup", endHold);
 act.addEventListener("pointercancel", endHold);
 act.addEventListener("contextmenu", e => e.preventDefault());
 act.addEventListener("click", () => {
-  if (!G || !myTurn() || G.throwsLeft > 0) return;
+  if (!G || !canMove()) return;
   if (ui.group !== null) doMove(ui.sel, ui.group);
   else if (currentChoices().includes(WAIT)) pickGroup(WAIT);
 });
@@ -1714,7 +1730,7 @@ document.addEventListener("keydown", e => {
 document.addEventListener("keyup", e => { if (e.code === "Space") endHold(); });
 $("#results").onclick = e => {
   const ch = e.target.closest(".chip[data-i]");
-  if (!ch || !G || !myTurn() || ui.busy || G.throwsLeft > 0) return;
+  if (!ch || !G || !canMove() || ui.busy) return;
   ui.sel = +ch.dataset.i;
   if (ui.group !== null && !groupsFor(G, G.turn, G.results[ui.sel]).includes(ui.group)) ui.group = null;
   render(); sharePick();
@@ -1726,7 +1742,7 @@ $("#tokenLayer").addEventListener("click", e => {
   if (stackAt(G, G.turn, pos).length) pickGroup(pos);
 });
 $("#markLayer").addEventListener("click", e => {
-  if (e.target.closest(".dest:not(.peek)") && G && myTurn() && ui.group !== null) doMove(ui.sel, ui.group);
+  if (e.target.closest(".dest:not(.peek)") && G && canMove() && ui.group !== null) doMove(ui.sel, ui.group);
 });
 $("#teams").addEventListener("click", e => { if (e.target.closest("[data-new]")) pickGroup(WAIT); });
 
