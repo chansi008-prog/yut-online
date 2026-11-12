@@ -307,6 +307,21 @@
   .watchers span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--bg); font-size: 16px; }
   .lobby-foot { margin: 6px 0 4px; }
   .wait-note { text-align: center; color: var(--soft); font-size: 18px; padding: 16px; background: var(--card); border-radius: 18px; box-shadow: 0 2px 0 var(--line); }
+  /* ───── TV + 리모컨 모드 ───── */
+  .tv-card { margin-top: 12px; }
+  .tv-card .big-btn { margin-top: 10px; }
+  .tv-wait { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 16px; }
+  .tv-wait h1 { margin: 6px 0 4px; font-size: 40px; font-weight: 400; }
+  .tv-qr { background: #fff; padding: 18px; border-radius: 24px; box-shadow: 0 4px 0 var(--line), 0 10px 30px rgba(120,80,30,.15); margin: 16px 0; }
+  .tv-qr svg { display: block; width: min(52vh, 72vw); height: auto; }
+  .tv-code { font-size: 20px; color: var(--soft); }
+  .tv-code b { color: var(--ink); font-weight: 400; font-size: 34px; letter-spacing: 4px; margin-left: 6px; }
+  .tv-status { margin: 14px 0 0; font-size: 21px; }
+  .tv-status.ok { color: var(--jade); }
+  body.tvmode #reactBtn, body.tvmode .watch-bar, body.tvmode .tcard .people:empty, body.tvmode .turn-chip .me-tag { display: none; }
+  body.tvscreen #actBtn, body.tvscreen #timer { display: none !important; }
+  body.tvscreen .mat .msg { font-size: 22px; color: #fff; min-height: 34px; }
+  body.tvscreen .chip { pointer-events: none; }
   .notice { background: #FFF1DA; border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; font-size: 16px; }
 
   .turn-chip.mine { box-shadow: 0 0 0 3px var(--c), 0 2px 0 var(--line); animation: glow 1.4s ease-in-out infinite; }
@@ -354,8 +369,53 @@
     </div>
   </div>
   <button class="ghost-btn" id="createOpen">＋ 새 방 만들기</button>
+  <div class="card tv-card">
+    <h2>📺 TV + 리모컨</h2>
+    <small class="hint" style="margin:0">모두 한자리에 모였을 때: 태블릿을 TV에 연결해 판을 크게 보고, 휴대폰 하나를 돌려 가며 던져요.</small>
+    <button class="big-btn jade" id="tvOpen">이 기기를 TV 화면으로 쓰기</button>
+  </div>
   <p class="err" id="homeErr"></p>
   <button class="link-btn" id="rulesLink">윷놀이 규칙 보기</button>
+</section>
+
+<!-- TV 화면: 리모컨 연결 기다리기 -->
+<section id="tvwait" class="hidden">
+  <div class="tv-wait">
+    <div class="logo" style="margin:0"><div class="mini-sticks"><i></i><i></i><i></i><i></i></div></div>
+    <h1>윷판 📺</h1>
+    <div class="tv-qr" id="tvQr"></div>
+    <div class="tv-code">방 번호<b id="tvCode"></b></div>
+    <p class="tv-status" id="tvStatus"></p>
+    <button class="link-btn" id="tvLeave">TV 화면 그만하기</button>
+  </div>
+</section>
+
+<!-- 리모컨(휴대폰): 팀 정하기 -->
+<section id="rsetup" class="wrap hidden">
+  <div class="logo" style="margin:10px 0 14px"><h1 style="font-size:30px">📱 리모컨</h1><small class="hint">TV 화면과 연결됐어요. 팀을 정하고 시작하세요.</small></div>
+  <div class="card">
+    <h2>팀
+      <span class="stepper"><button id="rTeamMinus" aria-label="팀 줄이기">−</button><b id="rTeamCount">2팀</b><button id="rTeamPlus" aria-label="팀 늘리기">＋</button></span>
+    </h2>
+    <div id="rTeamRows"></div>
+  </div>
+  <div class="card">
+    <h2>팀마다 말 개수</h2>
+    <div class="seg" id="rPieceSeg"><button data-n="2">2개</button><button data-n="3">3개</button><button data-n="4">4개</button></div>
+  </div>
+  <div class="card">
+    <h2>규칙</h2>
+    <div class="toggle"><div>빽도<small>표시된 윷 하나만 엎어지면 한 칸 뒤로</small></div><button class="switch" id="rBack" aria-label="빽도"></button></div>
+    <div class="toggle"><div>낙<small>가끔 윷이 판 밖으로 떨어져 무효</small></div><button class="switch" id="rNak" aria-label="낙"></button></div>
+  </div>
+  <div class="card">
+    <h2>게이지 효과</h2>
+    <div class="seg" id="rMultSeg"><button data-m="1.5">×1.5</button><button data-m="2">×2</button><button data-m="3">×3</button></div>
+    <h2 style="margin-top:14px">바늘 속도</h2>
+    <div class="seg" id="rSpeedSeg"><button data-s="1500">천천히</button><button data-s="1000">보통</button><button data-s="650">빠르게</button></div>
+  </div>
+  <button class="big-btn" id="rStart">시작하기</button>
+  <button class="link-btn" id="rLeave">리모컨 그만하기</button>
 </section>
 
 <!-- 방 만들기 -->
@@ -447,6 +507,7 @@
 
 <div id="overlay"></div>
 
+<script src="qrcode.min.js"></script>
 <script type="module">
 import { connect } from "./net.js";
 import { firebaseConfig } from "./config.js";
@@ -734,6 +795,11 @@ const members = () => Object.entries(room.members || {}).filter(([, m]) => m && 
 function teamPlayers(t) { return members().filter(m => m.role === "player" && m.team === t).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0)); }
 const watchers = () => members().filter(m => m.role === "watch").sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
 const isHost = () => room.meta && room.meta.host === me.uid;
+// TV + 리모컨 모드: 방장 기기 = TV 화면, meta.remote = 돌려 쓰는 휴대폰
+const isTV = () => !!(room.meta && room.meta.mode === "tv");
+const amTVScreen = () => isTV() && room.meta.host === me.uid;
+const amRemote = () => isTV() && room.meta.remote === me.uid;
+const canControl = () => isTV() ? amRemote() : isHost();     // 한 판 더 · 팀 바꾸기를 누를 수 있는 기기
 const myMember = () => room.members && room.members[me.uid];
 const nameOf = uid => (room.members[uid] && room.members[uid].name) || "";
 
@@ -747,6 +813,12 @@ function supervisor() {
 // 지금 차례를 누가 움직이는지: {uid, ai, waiting}
 function controller(S) {
   const t = S.turn, list = teamPlayers(t), on = list.filter(m => m.online);
+  if (isTV()) {
+    // 사람 팀은 모두 리모컨 휴대폰이, 컴퓨터 팀은 TV 화면 기기가 움직인다. 시간 제한·대신하기 없음
+    if (S.teams[t].ai) return { uid: supervisor(), ai: true };
+    const r = room.members[room.meta.remote];
+    return r && r.online ? { uid: room.meta.remote, ai: false } : { uid: "", ai: false, waiting: true, remoteGone: true };
+  }
   if (S.teams[t].ai || !list.length) return { uid: supervisor(), ai: true };
   if (!on.length) {
     const recent = list.some(m => now() - (m.lastSeen || 0) < GRACE);
@@ -763,7 +835,7 @@ const myTurn = () => G && !G.over && !controller(G).ai && controller(G).uid === 
 const iRunAI = () => G && !G.over && controller(G).ai && controller(G).uid === me.uid;
 
 function showScreen(id) {
-  for (const s of ["home", "create", "lobby", "game"]) $("#" + s).classList.toggle("hidden", s !== id);
+  for (const s of ["home", "create", "lobby", "game", "tvwait", "rsetup"]) $("#" + s).classList.toggle("hidden", s !== id);
 }
 
 async function boot() {
@@ -774,6 +846,8 @@ async function boot() {
   $("#myName").value = me.name;
   const urlCode = new URLSearchParams(location.search).get("room");
   if (urlCode) $("#joinCode").value = urlCode;
+  const remoteCode = new URLSearchParams(location.search).get("remote");
+  if (remoteCode) return joinRemote(remoteCode);
   // 하던 방이 남아 있으면 돌아가기
   const last = store.get("yutol.room", "");
   if (last) {
@@ -840,6 +914,11 @@ $("#createBtn").onclick = async () => {
 
 async function joinRoom(role) {
   const err = t => { $("#homeErr").textContent = t; };
+  const code0 = $("#joinCode").value.trim();
+  if (/^\d{4,8}$/.test(code0)) {
+    const r0 = await db.get(`rooms/${code0}/meta`).catch(() => null);
+    if (r0 && r0.mode === "tv") return joinRemote(code0);
+  }
   if (!readName()) return;
   const code = $("#joinCode").value.trim();
   if (!/^\d{4,8}$/.test(code)) return err("방 번호(4~8자리 숫자)를 넣어 주세요");
@@ -899,7 +978,9 @@ async function leaveRoom(msg = "") {
   leaveSubs();
   await db.cancelPresence();
   try {
-    if (room.meta && room.meta.host === me.uid) {
+    if (isTV() && room.meta.host === me.uid) await db.remove(`rooms/${code}`);
+    else if (isTV()) await db.update(`rooms/${code}`, { ...(room.meta.remote === me.uid ? { "meta/remote": null } : {}), [`members/${me.uid}`]: null });
+    else if (room.meta && room.meta.host === me.uid) {
       const others = members().filter(m => m.uid !== me.uid).sort((a, b) => (b.online - a.online) || (a.joinedAt - b.joinedAt));
       if (others.length) await db.update(`rooms/${code}`, { "meta/host": others[0].uid, [`members/${me.uid}`]: null });
       else await db.remove(`rooms/${code}`);
@@ -908,6 +989,7 @@ async function leaveRoom(msg = "") {
   store.del("yutol.room");
   history.replaceState(null, "", location.pathname);
   room.code = ""; G = null; closeSheet();
+  document.body.classList.remove("tvmode", "tvscreen", "remote"); releaseWake();
   $("#homeErr").textContent = msg;
   $("#backRoomBtn").classList.add("hidden");
   showScreen("home");
@@ -920,6 +1002,25 @@ function refreshRoom() {
   if (!room.meta) return;
   const mine = myMember();
   if (room.members && Object.keys(room.members).length && (!mine || !mine.name)) return leaveRoom("방에서 나오게 됐어요");
+  if (room.meta.status === "lobby" && lastStatus === "playing") closeSheetIf("win");   // 다음 판 고르러 가면 승리 화면을 닫는다
+  document.body.classList.toggle("tvmode", isTV());
+  document.body.classList.toggle("tvscreen", amTVScreen());
+  document.body.classList.toggle("remote", amRemote());
+  if (isTV()) {
+    if (amTVScreen()) keepAwake();
+    // 다른 휴대폰이 리모컨을 넘겨받으면 이 휴대폰은 첫 화면으로
+    if (!amTVScreen() && !amRemote() && myMember() && myMember().role === "remote") return leaveRoom("다른 휴대폰이 리모컨이 됐어요");
+    const st = room.meta.status;
+    if (st === "lobby") {
+      if (amRemote()) { if (lastStatus !== "lobby" || $("#rsetup").classList.contains("hidden")) renderRSetup(); showScreen("rsetup"); }
+      else { renderTvWait(); showScreen("tvwait"); }
+    } else if (st === "playing") {
+      if (lastStatus !== "playing") enterBoard();
+      showScreen("game"); if (G) render(); afterView();
+    }
+    lastStatus = st;
+    return;
+  }
   // 방장이 오래 자리를 비우면 가장 먼저 들어온 접속자가 방장을 맡는다
   const h = room.members[room.meta.host];
   if ((!h || !h.name || (!h.online && now() - (h.lastSeen || 0) > 20000)) && supervisor() === me.uid && room.meta.host !== me.uid) {
@@ -1038,9 +1139,8 @@ async function invite() {
   try { await navigator.clipboard.writeText(`${text}\n${url}`); alert("초대 링크를 복사했어요. 카톡에 붙여 넣어 보내 주세요."); }
   catch { prompt("이 링크를 복사해서 보내 주세요", url); }
 }
-function newGameState() {
-  const cfg = room.meta.cfg;
-  const teams = room.teams.map((t, i) => ({ name: t.name || ANIMAL_NAME[t.animal], animal: t.animal, ai: !!t.ai, color: TEAM_COLORS[i] }));
+function newGameState(teamsIn = room.teams, cfg = room.meta.cfg) {
+  const teams = teamsIn.map((t, i) => ({ name: t.name || ANIMAL_NAME[t.animal], animal: t.animal, ai: !!t.ai, color: TEAM_COLORS[i] }));
   const S = { gid: Math.random().toString(36).slice(2, 8), teams, rules: { back: cfg.back, nak: cfg.nak, mult: cfg.mult, sweep: cfg.sweep },
     pieces: [], turn: 0, throwsLeft: 1, results: [], over: false, winner: -1, sticks: null, ver: 0, rot: teams.map(() => 0), thrower: "", ev: { n: 0, type: "start" }, at: now() };
   teams.forEach((_, t) => { for (let i = 0; i < cfg.pieces; i++) S.pieces.push({ id: `${t}-${i}`, team: t, pos: WAIT, hist: [] }); });
@@ -1051,6 +1151,126 @@ async function startGame() {
   if (!isHost()) return;
   await db.update(R(""), { "meta/status": "playing", game: newGameState(), live: null });
 }
+
+/* ════════ TV + 리모컨 모드 ════════ */
+$("#tvOpen").onclick = async () => {
+  $("#tvOpen").disabled = true;
+  try {
+    await db.cleanup().catch(() => {});
+    let code = "";
+    for (let i = 0; i < 6 && !code; i++) {        // 겹치지 않는 6자리 번호
+      const c = String(100000 + Math.floor(Math.random() * 900000));
+      const ex = await db.get(`rooms/${c}/meta`);
+      if (!ex) code = c;
+    }
+    if (!code) throw new Error("no code");
+    const r = rcfg();
+    const teams = r.teams.slice(0, r.count).map(t => ({ name: t.name, animal: t.animal, ai: !!t.ai }));
+    await db.set(`rooms/${code}`, {
+      meta: { host: me.uid, created: now(), status: "lobby", mode: "tv", cfg: { pieces: r.pieces, back: r.back, nak: r.nak, mult: r.mult, sweep: r.sweep, watch: true } },
+      teams,
+      members: { [me.uid]: { name: "TV", role: "tv", team: -1, joinedAt: now(), online: true } },
+    });
+    await enterRoom(code);
+  } catch (e) { console.error(e); $("#homeErr").textContent = "TV 화면을 만들지 못했어요. 잠시 뒤 다시 해 주세요"; }
+  finally { $("#tvOpen").disabled = false; }
+};
+$("#tvLeave").onclick = () => { if (confirm("TV 화면을 그만할까요? 방이 닫혀요.")) leaveRoom(); };
+let qrFor = "";
+function renderTvWait() {
+  $("#tvCode").textContent = room.code;
+  if (qrFor !== room.code && window.qrcode) {
+    const url = `${location.origin}${location.pathname}?remote=${room.code}`;
+    const qr = window.qrcode(0, "M"); qr.addData(url); qr.make();
+    $("#tvQr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+    qrFor = room.code;
+  }
+  const r = room.meta.remote && room.members[room.meta.remote];
+  const st = $("#tvStatus");
+  st.classList.toggle("ok", !!(r && r.online));
+  st.innerHTML = r && r.online
+    ? "📱 리모컨이 연결됐어요! 휴대폰에서 팀을 정하고 <b>시작하기</b>를 눌러 주세요"
+    : "휴대폰 <b>기본 카메라</b>로 QR을 찍으면 리모컨이 돼요<br><small class=\"hint\">카메라가 안 되면 휴대폰에서 윷판 온라인을 열고 방 번호를 넣어 주세요</small>";
+}
+async function joinRemote(code) {
+  const err = t => { showScreen("home"); $("#homeErr").textContent = t; };
+  const meta = await db.get(`rooms/${code}/meta`).catch(() => null);
+  if (!meta || meta.mode !== "tv" || meta.created < now() - DAY) return err("TV 화면을 찾지 못했어요. TV에 뜬 QR을 다시 찍어 주세요");
+  await db.set(`rooms/${code}/members/${me.uid}`, { name: "리모컨", role: "remote", team: -1, joinedAt: now(), online: true });
+  await db.set(`rooms/${code}/meta/remote`, me.uid);
+  history.replaceState(null, "", location.pathname);
+  await enterRoom(code);
+}
+// 리모컨 팀 설정 (휴대폰에 기억)
+const rcfg = () => {
+  const d = store.get("yutol.rcfg", null) || { count: 2, pieces: 4, back: true, nak: true, mult: 1.5, sweep: 1000,
+    teams: [0, 1, 2, 3].map(i => ({ name: ANIMAL_NAME[DEFAULT_ANIMALS[i]], animal: DEFAULT_ANIMALS[i], ai: false })) };
+  return d;
+};
+let R_ = null;
+function renderRSetup() {
+  R_ = rcfg();
+  $("#rTeamCount").textContent = R_.count + "팀";
+  $("#rTeamMinus").disabled = R_.count <= 2; $("#rTeamPlus").disabled = R_.count >= 4;
+  $("#rTeamRows").innerHTML = R_.teams.slice(0, R_.count).map((t, i) => `
+    <div class="team-row">
+      <button class="emoji-btn" data-ri="${i}" style="--c:${TEAM_COLORS[i]}" aria-label="말 바꾸기">${ani(t.animal)}</button>
+      <input data-ri="${i}" value="${esc(t.name)}" maxlength="8" aria-label="${i + 1}팀 이름">
+      <div class="who" data-ri="${i}">
+        <button data-ai="0" class="${t.ai ? "" : "on"}">사람</button><button data-ai="1" class="${t.ai ? "on" : ""}">컴퓨터</button>
+      </div>
+    </div>`).join("");
+  document.querySelectorAll("#rPieceSeg button").forEach(b => b.classList.toggle("on", +b.dataset.n === R_.pieces));
+  document.querySelectorAll("#rMultSeg button").forEach(b => b.classList.toggle("on", +b.dataset.m === R_.mult));
+  document.querySelectorAll("#rSpeedSeg button").forEach(b => b.classList.toggle("on", +b.dataset.s === R_.sweep));
+  $("#rBack").classList.toggle("on", R_.back); $("#rNak").classList.toggle("on", R_.nak);
+}
+const saveR = () => { store.set("yutol.rcfg", R_); renderRSetup(); };
+$("#rTeamMinus").onclick = () => { R_.count = Math.max(2, R_.count - 1); saveR(); };
+$("#rTeamPlus").onclick = () => { R_.count = Math.min(4, R_.count + 1); saveR(); };
+$("#rPieceSeg").onclick = e => { const b = e.target.closest("button"); if (b) { R_.pieces = +b.dataset.n; saveR(); } };
+$("#rMultSeg").onclick = e => { const b = e.target.closest("button"); if (b) { R_.mult = +b.dataset.m; saveR(); } };
+$("#rSpeedSeg").onclick = e => { const b = e.target.closest("button"); if (b) { R_.sweep = +b.dataset.s; saveR(); } };
+$("#rBack").onclick = () => { R_.back = !R_.back; saveR(); };
+$("#rNak").onclick = () => { R_.nak = !R_.nak; saveR(); };
+$("#rTeamRows").addEventListener("click", e => {
+  const eb = e.target.closest(".emoji-btn");
+  if (eb) return pickAnimalR(+eb.dataset.ri);
+  const wb = e.target.closest(".who button");
+  if (wb) { R_.teams[+wb.parentElement.dataset.ri].ai = wb.dataset.ai === "1"; saveR(); }
+});
+$("#rTeamRows").addEventListener("input", e => { if (e.target.matches("input")) { R_.teams[+e.target.dataset.ri].name = e.target.value; store.set("yutol.rcfg", R_); } });
+function pickAnimalR(i) {
+  const t = R_.teams[i], used = R_.teams.slice(0, R_.count).map(x => x.animal);
+  openSheet(`<div class="sheet"><h3>${i + 1}팀 말 고르기</h3>
+    <div class="animal-grid" style="--c:${TEAM_COLORS[i]}">
+    ${ANIMALS.map(([k, n]) => `<button data-k="${k}" class="${k === t.animal ? "on" : ""}" ${k !== t.animal && used.includes(k) ? "disabled" : ""}>${ani(k)}${n}</button>`).join("")}</div>
+    <button class="ghost-btn" data-close>닫기</button></div>`);
+  $("#overlay .sheet").onclick = e => {
+    if (e.target.closest("[data-close]")) return closeSheet();
+    const b = e.target.closest("[data-k]");
+    if (!b || b.disabled) return;
+    const nm = (t.name || "").trim();
+    if (!nm || nm === ANIMAL_NAME[t.animal]) t.name = ANIMAL_NAME[b.dataset.k];
+    t.animal = b.dataset.k; closeSheet(); saveR();
+  };
+}
+$("#rStart").onclick = async () => {
+  if (!amRemote()) return;
+  const teams = R_.teams.slice(0, R_.count).map((t, i) => ({ name: (t.name || "").trim() || ANIMAL_NAME[t.animal], animal: t.animal, ai: !!t.ai }));
+  if (teams.every(t => t.ai)) return alert("사람 팀이 하나는 있어야 해요");
+  const cfg = { pieces: R_.pieces, back: R_.back, nak: R_.nak, mult: R_.mult, sweep: R_.sweep, watch: true };
+  $("#rStart").disabled = true;
+  try {
+    await db.update(R(""), { teams, "meta/cfg": cfg, "meta/status": "playing", game: newGameState(teams, cfg), live: null });
+  } finally { $("#rStart").disabled = false; }
+};
+$("#rLeave").onclick = () => { if (confirm("리모컨을 그만할까요?")) leaveRoom(); };
+// TV 화면은 꺼지지 않게
+let wake = null;
+async function keepAwake() { try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); } } catch {} }
+function releaseWake() { try { wake && wake.release(); } catch {} wake = null; }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && document.body.classList.contains("tvscreen")) keepAwake(); });
 
 /* ════════ 판 진행 (온라인) ════════ */
 function enterBoard() {
@@ -1127,6 +1347,7 @@ async function transition(prev, S) {
 }
 function turnPop() {
   const T = G.teams[G.turn], c = controller(G);
+  if (isTV()) return pop("", `${T.name} 차례`, T);
   const who = c.ai ? "" : nameOf(c.uid);
   pop("", c.uid === me.uid && !c.ai ? "내 차례!" : `${T.name}${who ? " · " + who : ""} 차례`, T);
 }
@@ -1135,7 +1356,7 @@ function afterView() {
   if (!G || proc || ui.busy || !room.meta || room.meta.status !== "playing") return;
   // 던질 사람이 나갔으면 팀원에게 넘긴다 (담당 기기가 기록)
   const c = controller(G);
-  if (!c.ai && c.uid === me.uid && G.thrower !== me.uid && G.ev.n >= 0) {
+  if (!isTV() && !c.ai && c.uid === me.uid && G.thrower !== me.uid && G.ev.n >= 0) {
     commit(S => { S.thrower = me.uid; S.ev = { ...S.ev }; });
   }
   render();
@@ -1223,7 +1444,8 @@ function currentChoices() {
 function render(keepMsg) {
   if (!G) return;
   const T = G.teams[G.turn], c = controller(G), mine = myTurn();
-  const whoName = c.ai ? (T.ai ? "컴퓨터" : "컴퓨터가 대신") : c.waiting ? "다시 들어오길 기다리는 중" : nameOf(c.uid);
+  const whoName = isTV() ? (c.ai ? "컴퓨터" : c.remoteGone ? "리모컨 연결을 기다리는 중" : "차례")
+    : c.ai ? (T.ai ? "컴퓨터" : "컴퓨터가 대신") : c.waiting ? "다시 들어오길 기다리는 중" : nameOf(c.uid);
   $("#multTag").textContent = `효과 ×${G.rules.mult}`;
   $("#roomTag").textContent = `${room.code}번 방`;
   const chip = $("#turnChip");
@@ -1298,6 +1520,11 @@ function render(keepMsg) {
   const amWatch = (myMember() || {}).role === "watch";
   if (!keepMsg) {
     if (G.over) setMsg("");
+    else if (isTV() && c.remoteGone) setMsg("📱 리모컨 휴대폰 연결이 끊겼어요. 휴대폰에서 다시 열어 주세요");
+    else if (isTV() && !mine && !c.ai) setMsg(G.throwsLeft > 0
+      ? (room.live.hold ? `<b>${esc(T.name)}</b> 팀이 바늘을 보고 있어요!` : `📱 휴대폰을 <b>${esc(T.name)}</b> 팀에게 넘겨 주세요`)
+      : `<b>${esc(T.name)}</b> 팀이 말을 고르고 있어요…`);
+    else if (isTV() && mine && G.throwsLeft > 0 && !G.results.length) setMsg(`<b>${esc(T.name)}</b> 팀 차례! 버튼을 누르고 있다가 바늘이 원하는 칸에 오면 떼세요`);
     else if (c.waiting) setMsg(`<b>${esc(T.name)}</b> 팀이 다시 들어오길 기다리는 중… 조금 뒤엔 컴퓨터가 대신해요`);
     else if (!mine) {
       const who = c.ai ? (T.ai ? `<b>컴퓨터(${esc(T.name)})</b>` : `<b>컴퓨터</b>가 ${esc(T.name)} 대신`) : `<b>${esc(whoName)}</b>`;
@@ -1328,10 +1555,10 @@ function render(keepMsg) {
       minis += `<span class="mini ${cn ? "can" : ""} ${cn && ui.group === WAIT ? "sel" : ""}" ${cn ? 'data-new="1" role="button" aria-label="새 말 올리기"' : ""}>${ani(tm.animal)}</span>`;
     }
     for (let i = 0; i < done; i++) minis += `<span class="mini gone">${ani(tm.animal)}</span>`;
-    const people = tm.ai ? "🤖 컴퓨터" : teamPlayers(t).map(m => {
+    const people = tm.ai ? "🤖 컴퓨터" : isTV() ? "" : teamPlayers(t).map(m => {
       const cur = t === G.turn && !c.ai && m.uid === c.uid;
       return `<span class="${cur ? "now-p" : ""}">${cur ? "▶" : ""}${esc(m.name)}${m.online ? "" : "💤"}</span>`;
-    }).join(" · ") || "비어 있음";
+    }).join(" · ") || (isTV() ? "" : "비어 있음");
     return `<div class="tcard ${t === G.turn ? "now" : ""}" style="--c:${tm.color};--c-dark:${darken(tm.color)}">
       <div class="nm">${esc(tm.name)}</div>
       <div class="people">${people}</div>
@@ -1552,6 +1779,24 @@ function closeSheetIf(tag) { const s = $("#overlay .scrim"); if (s && s.dataset.
 window.closeSheet = closeSheet;
 
 $("#menuBtn").onclick = () => {
+  if (isTV()) {
+    openSheet(`<div class="sheet"><h3>메뉴</h3>
+      ${amRemote() ? `<button class="row-btn" data-act="lobby">👥 게임 그만하고 팀 다시 정하기</button>` : ""}
+      <button class="row-btn" data-act="sound">${sound ? "🔊 효과음 끄기" : "🔈 효과음 켜기"}</button>
+      <button class="row-btn" data-act="rules">📜 규칙 보기</button>
+      <button class="row-btn" data-act="leave">🚪 ${amTVScreen() ? "TV 화면 그만하기" : "리모컨 그만하기"}</button>
+      <button class="ghost-btn" data-act="close">닫기</button></div>`);
+    $("#overlay .sheet").onclick = async e => {
+      const a = e.target.closest("[data-act]")?.dataset.act;
+      if (!a) return;
+      if (a === "close") closeSheet();
+      if (a === "sound") { sound = !sound; store.set("yutol.sound", sound); closeSheet(); }
+      if (a === "rules") showRules();
+      if (a === "lobby" && confirm("지금 판을 끝내고 팀을 다시 정할까요?")) { closeSheet(); await db.update(R(""), { "meta/status": "lobby", game: null, live: null }); }
+      if (a === "leave" && confirm(amTVScreen() ? "TV 화면을 그만할까요? 방이 닫혀요." : "리모컨을 그만할까요?")) leaveRoom();
+    };
+    return;
+  }
   openSheet(`<div class="sheet"><h3>메뉴</h3>
     <button class="row-btn" data-act="invite">📨 초대 링크 보내기 (${room.code}번 방)</button>
     ${isHost() ? `<button class="row-btn" data-act="lobby">🏠 게임 그만하고 대기실로</button>` : ""}
@@ -1573,6 +1818,9 @@ $("#menuBtn").onclick = () => {
 $("#rulesLink").onclick = () => showRules();
 function showRules() {
   openSheet(`<div class="sheet rules"><h3 style="font-family:var(--font)">윷판 온라인 하는 법</h3>
+    <h4>📺 TV + 리모컨</h4>
+    <ul><li>태블릿(TV에 연결)에서 <b>이 기기를 TV 화면으로 쓰기</b>를 누르면 QR코드가 떠요.</li>
+    <li>휴대폰 기본 카메라로 QR을 찍으면 그 휴대폰이 리모컨이 돼요. 팀을 정하고 시작한 뒤, 차례마다 휴대폰을 넘겨 주세요.</li></ul>
     <h4>방</h4>
     <ul><li>한 사람이 <b>새 방 만들기</b>를 누르고 방 번호를 알려 줘요. 초대 링크를 카톡으로 보내도 돼요.</li>
     <li>다른 사람은 방 번호를 넣고 <b>참가하기</b>나 <b>관전하기</b>를 눌러요.</li>
@@ -1601,16 +1849,16 @@ function showWin() {
   if (!W) return;
   const rank = G.teams.map((tm, t) => ({ tm, t, done: piecesOf(G, t).filter(p => p.pos === GOAL).length, dist: piecesOf(G, t).reduce((a, p) => a + (p.pos === GOAL ? 0 : distToGoal(p.pos, p.hist)), 0) }))
     .filter(r => r.t !== G.winner).sort((a, b) => b.done - a.done || a.dist - b.dist);
-  const names = W.ai ? "컴퓨터" : teamPlayers(G.winner).map(m => m.name).join(" · ");
+  const names = W.ai ? "컴퓨터" : isTV() ? "" : teamPlayers(G.winner).map(m => m.name).join(" · ");
   openSheet(`<div class="win" style="--c:${W.color};--c-dark:${darken(W.color)}"><div class="crown">${ani(W.animal)}</div>
     <h3>${esc(W.name)} 승리!</h3><div style="color:var(--soft)">${esc(names)}</div>
     <div class="rank">${rank.map((r, i) => `<div><span>${i + 2}등</span><span>${ani(r.tm.animal, "ani-inline")} ${esc(r.tm.name)}</span><span>골인 ${r.done}/${piecesOf(G, r.t).length}</span></div>`).join("")}</div>
-    ${isHost() ? `<button class="big-btn" id="againBtn">한 판 더</button><button class="ghost-btn" id="toLobbyBtn">대기실로 (팀 바꾸기)</button>`
-      : `<div class="wait-note" style="margin-bottom:10px">방장이 다음 판을 고르는 중이에요</div><button class="ghost-btn" data-close>판 보기</button>`}</div>`, true, "win");
-  if (isHost()) {
+    ${canControl() ? `<button class="big-btn" id="againBtn">한 판 더</button><button class="ghost-btn" id="toLobbyBtn">${isTV() ? "팀 다시 정하기" : "대기실로 (팀 바꾸기)"}</button>`
+      : `<div class="wait-note" style="margin-bottom:10px">${isTV() ? "📱 휴대폰에서 다음 판을 골라 주세요" : "방장이 다음 판을 고르는 중이에요"}</div>${amTVScreen() ? "" : `<button class="ghost-btn" data-close>판 보기</button>`}`}</div>`, true, "win");
+  if (canControl()) {
     $("#againBtn").onclick = async () => { closeSheet(); await db.update(R(""), { game: newGameState(), live: null }); };
     $("#toLobbyBtn").onclick = async () => { closeSheet(); await db.update(R(""), { "meta/status": "lobby", game: null, live: null }); };
-  } else $("#overlay [data-close]").onclick = closeSheet;
+  } else if ($("#overlay [data-close]")) $("#overlay [data-close]").onclick = closeSheet;
   confetti(W.color);
 }
 function confetti(color) {
@@ -1632,7 +1880,7 @@ function confetti(color) {
    그 기기가 잠들어 있으면 방 관리 담당 기기가 5초 뒤 대신한다. */
 const TURN_MS = 15000, ANIM_PAD = 2500, SUP_PAD = 5000, HOLD_MAX = 15000;
 function turnLeft() {
-  if (!G || G.over || !G.at || !room.meta || room.meta.status !== "playing") return null;
+  if (!G || G.over || !G.at || !room.meta || room.meta.status !== "playing" || isTV()) return null;
   const c = controller(G);
   if (c.ai || c.waiting || !c.uid) return null;
   return G.at + ANIM_PAD + TURN_MS - now();
