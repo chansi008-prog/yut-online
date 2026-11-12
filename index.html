@@ -426,6 +426,11 @@
     <h2 style="margin-top:14px">바늘 속도</h2>
     <div class="seg" id="rSpeedSeg"><button data-s="1500">천천히</button><button data-s="1000">보통</button><button data-s="650">빠르게</button></div>
   </div>
+  <div class="card">
+    <h2>던지는 방법</h2>
+    <div class="seg" id="rThrowSeg"><button data-t="button">버튼 꾹 누르기</button><button data-t="shake">📳 휴대폰 흔들기</button></div>
+    <small class="hint" id="rThrowHint"></small>
+  </div>
   <button class="big-btn" id="rStart">시작하기</button>
   <button class="link-btn" id="rLeave">리모컨 그만하기</button>
 </section>
@@ -610,7 +615,10 @@ const audioOn = () => !!actx && actx.state === "running";
 // 화면 어디든 누르면 소리를 켠다 (아이폰·아이패드는 한 번 눌러야 소리가 남)
 document.addEventListener("pointerdown", () => { const was = audioOn(); ensureAudio(); if (!was) setTimeout(() => { if (audioOn()) document.querySelectorAll(".sound-hint").forEach(e => e.remove()); }, 200); }, true);
 // 앱 버전: 같은 방의 기기끼리 버전이 다르면 오래된 쪽이 새로 고친다
-const APP_VER = 11;
+const APP_VER = 12;
+// 던지는 방법 (기기마다 기억): "button" = 꾹 눌렀다 떼기, "shake" = 흔드는 동안 바늘이 움직이고 멈추면 던지기
+let throwMode = store.get("yutol.throw", "button");
+const THROW_HINT = { button: "버튼을 누르고 있다가, 바늘이 원하는 칸에 오면 떼요.", shake: "차례가 되면 '흔들 준비'를 한 번 누르고, 휴대폰을 흔드는 동안 바늘이 움직여요. 흔들기를 멈추면 던져져요. 휴대폰을 놓치지 않게 꽉 쥐어 주세요!" };
 function tone(freq, dur, type = "sine", vol = .15, when = 0) {
   if (!sound) return;
   try {
@@ -1270,6 +1278,8 @@ function renderRSetup() {
   document.querySelectorAll("#rMultSeg button").forEach(b => b.classList.toggle("on", +b.dataset.m === R_.mult));
   document.querySelectorAll("#rSpeedSeg button").forEach(b => b.classList.toggle("on", +b.dataset.s === R_.sweep));
   $("#rBack").classList.toggle("on", R_.back); $("#rNak").classList.toggle("on", R_.nak);
+  document.querySelectorAll("#rThrowSeg button").forEach(b => b.classList.toggle("on", b.dataset.t === throwMode));
+  $("#rThrowHint").textContent = THROW_HINT[throwMode];
 }
 const saveR = () => { store.set("yutol.rcfg", R_); renderRSetup(); };
 $("#rTeamMinus").onclick = () => { R_.count = Math.max(2, R_.count - 1); saveR(); };
@@ -1278,6 +1288,8 @@ $("#rPieceSeg").onclick = e => { const b = e.target.closest("button"); if (b) { 
 $("#rMultSeg").onclick = e => { const b = e.target.closest("button"); if (b) { R_.mult = +b.dataset.m; saveR(); } };
 $("#rSpeedSeg").onclick = e => { const b = e.target.closest("button"); if (b) { R_.sweep = +b.dataset.s; saveR(); } };
 $("#rBack").onclick = () => { R_.back = !R_.back; saveR(); };
+$("#rThrowSeg").onclick = e => { const b = e.target.closest("button"); if (b) setThrowMode(b.dataset.t); };
+function setThrowMode(m) { throwMode = m; store.set("yutol.throw", m); disarmShake(); if (R_) renderRSetup(); if (G) render(); }
 $("#rNak").onclick = () => { R_.nak = !R_.nak; saveR(); };
 $("#rTeamRows").addEventListener("click", e => {
   const eb = e.target.closest(".emoji-btn");
@@ -1388,7 +1400,7 @@ async function transition(prev, S) {
   }
   G = S; ui.busy = false;
   if (S.over) { render(); sfx.win(); showWin(); return; }
-  if (ev.next) { renderSticks(null); renderGauge(null); render(); turnPop(); await sleep(300); }
+  if (ev.next) { disarmShake(); renderSticks(null); renderGauge(null); render(); turnPop(); await sleep(300); }
   else render();
 }
 function turnPop() {
@@ -1573,19 +1585,27 @@ function render(keepMsg) {
       : `<b>${esc(T.name)}</b> 팀이 말을 고르고 있어요…`);
     else if (amRemote() && G.throwsLeft <= 0) setMsg("📱 휴대폰을 다음 팀에 넘겨 주세요<br><small style=\"opacity:.8\">말은 심판(태블릿)이 움직여요</small>");
     else if (amTVScreen() && G.throwsLeft <= 0 && ui.group === null) setMsg(`<b>${esc(T.name)}</b> 팀 말을 골라 움직여 주세요`);
-    else if (isTV() && mine && G.throwsLeft > 0 && !G.results.length) setMsg(`<b>${esc(T.name)}</b> 팀 차례! 버튼을 누르고 있다가 바늘이 원하는 칸에 오면 떼세요`);
+    else if (isTV() && mine && G.throwsLeft > 0 && !G.results.length && !shakeMode()) setMsg(`<b>${esc(T.name)}</b> 팀 차례! 버튼을 누르고 있다가 바늘이 원하는 칸에 오면 떼세요`);
     else if (c.waiting) setMsg(`<b>${esc(T.name)}</b> 팀이 다시 들어오길 기다리는 중… 조금 뒤엔 컴퓨터가 대신해요`);
     else if (!mine) {
       const who = c.ai ? (T.ai ? `<b>컴퓨터(${esc(T.name)})</b>` : `<b>컴퓨터</b>가 ${esc(T.name)} 대신`) : `<b>${esc(whoName)}</b>`;
       setMsg(`${who}${G.throwsLeft > 0 ? (room.live.hold ? " 바늘을 보고 있어요!" : " 던질 차례예요") : " 말을 고르고 있어요"}…`);
     }
+    else if (G.throwsLeft > 0 && shakeMode() && !shake.fallback) setMsg(shake.armed
+      ? (G.results.length ? "한 번 더! 휴대폰을 흔들어서 던지세요" : "휴대폰을 흔들어 보세요. 흔들기를 멈추면 던져져요")
+      : "버튼을 한 번 눌러 흔들 준비를 하세요");
     else if (G.throwsLeft > 0) setMsg(G.results.length ? `한 번 더 던질 수 있어요${G.throwsLeft > 1 ? ` (${G.throwsLeft}번)` : ""}` : "버튼을 누르고 있다가, 바늘이 원하는 칸에 오면 떼세요");
     else if (ui.group === null) setMsg(G.results.length > 1 ? "쓸 결과를 고르고, 판에서 움직일 말을 누르세요" : "판에서 움직일 말을 누르세요");
     else setMsg(choices.length > 1 ? "표시된 곳으로 갈까요? 다른 말을 눌러 바꿀 수도 있어요" : "표시된 곳으로 갈까요?");
   }
   if (amRemote() && G.throwsLeft <= 0 && !G.over) { btn.innerHTML = "🤖 알아서 움직이기<small>심판 대신</small>"; btn.disabled = ui.busy || proc; btn.classList.add("hold-btn"); }
   else if (!mine) { btn.textContent = amWatch ? "관전 중" : G.over ? "끝!" : `${c.ai ? "컴퓨터" : whoName || "상대"} 차례예요`; btn.disabled = true; }
-  else if (G.throwsLeft > 0) { if (!hold) btn.textContent = G.results.length ? "꾹 눌러서 한 번 더" : "꾹 눌러서 던지기"; btn.disabled = ui.busy || proc; }
+  else if (G.throwsLeft > 0) {
+    if (!hold) btn.textContent = shakeMode() && !shake.fallback
+      ? (shake.armed ? "📳 흔들어서 던지세요!" : "📳 눌러서 흔들 준비")
+      : (G.results.length ? "꾹 눌러서 한 번 더" : "꾹 눌러서 던지기");
+    btn.disabled = ui.busy || proc || (shake.armed && shakeMode());
+  }
   else if (ui.group !== null) { btn.textContent = "이동하기"; btn.disabled = ui.busy || proc; btn.classList.add("jade"); }
   else if (choices.includes(WAIT)) { btn.textContent = "새 말 올리기"; btn.disabled = false; }
   else { btn.textContent = "말을 골라 주세요"; btn.disabled = true; }
@@ -1696,14 +1716,61 @@ function renderGauge(g) {
   n.classList.toggle("idle", g == null);
   if (g != null) n.style.left = g + "%";
 }
+/* ── 흔들어 던지기 ──
+   '흔들 준비'를 누르면(아이폰은 이때 센서 허락을 받는다) 흔들기를 듣기 시작한다.
+   일정 세기 이상 흔들리면 바늘이 움직이기 시작하고, 0.4초 넘게 잠잠하면 던진다.
+   다음 팀으로 넘어가면 준비가 풀려서, 휴대폰을 넘기다 흔들려도 던져지지 않는다. */
+const SHAKE_ON = 11, SHAKE_STILL_MS = 400, SHAKE_MAX_MS = 8000;
+const shake = { armed: false, listening: false, last: 0 };
+const shakeMode = () => throwMode === "shake";
+function onMotion(e) {
+  if (!shake.armed) return;
+  shake.gotEvent = true;
+  const a = e.acceleration;
+  let m;
+  if (a && a.x != null) m = Math.hypot(a.x, a.y, a.z);
+  else { const g = e.accelerationIncludingGravity; if (!g || g.x == null) return; m = Math.abs(Math.hypot(g.x, g.y, g.z) - 9.81); }
+  if (m > SHAKE_ON) {
+    shake.last = performance.now();
+    if (!hold && myTurn() && G.throwsLeft > 0 && !ui.busy && !proc) startHold();
+  }
+}
+// 흔들기를 멈췄는지 따로 살핀다 (센서 신호가 끊겨도 던지게)
+setInterval(() => {
+  if (!hold || !hold.shake) return;
+  const t = performance.now();
+  if (t - shake.last > SHAKE_STILL_MS || t - hold.t0 > SHAKE_MAX_MS) endHold();
+}, 80);
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function shakeFallback() {
+  shake.armed = false; shake.fallback = true;
+  toast("흔들기를 쓸 수 없어서 이번엔 버튼으로 던져요");
+  render();
+}
+async function armShake() {
+  ensureAudio();
+  if (typeof DeviceMotionEvent === "undefined") return shakeFallback();
+  // 아이폰은 허락을 받아야 하고, '허용 안 함'이면 버튼으로. 다른 휴대폰은 실제 신호가 오는지로 판단한다
+  if (typeof DeviceMotionEvent.requestPermission === "function") {
+    let r = "error";
+    try { r = await DeviceMotionEvent.requestPermission(); } catch {}
+    if (r !== "granted" && isIOS) return shakeFallback();
+  }
+  if (!shake.listening) { addEventListener("devicemotion", onMotion); shake.listening = true; }
+  shake.armed = true; shake.last = 0; shake.gotEvent = false;
+  setTimeout(() => { if (shake.armed && !shake.gotEvent) shakeFallback(); }, 1500);
+  buzz(30); render();
+}
+function disarmShake() { shake.armed = false; shake.fallback = false; }
+
 let hold = null;
 function startHold() {
   if (hold || ui.busy || proc || !myTurn() || G.throwsLeft <= 0) return;
   ensureAudio();
-  hold = { t0: performance.now(), st: now() };
+  hold = { t0: performance.now(), st: now(), shake: shake.armed };
   db.set(R("live/hold"), { uid: me.uid, t0: hold.st });
   $("#actBtn").classList.add("holding");
-  $("#actBtn").textContent = "놓으면 던져요!";
+  $("#actBtn").textContent = hold.shake ? "📳 흔드는 중… 멈추면 던져요!" : "놓으면 던져요!";
   const tick = () => { if (!hold) return; renderGauge(gaugeAt(G, performance.now() - hold.t0)); hold.raf = requestAnimationFrame(tick); };
   tick();
 }
@@ -1751,14 +1818,16 @@ function sharePick() {
 const act = $("#actBtn");
 act.addEventListener("pointerdown", e => {
   if (!G || G.throwsLeft <= 0 || !myTurn()) return;
+  if (shakeMode() && !shake.fallback) return;          // 흔들기 모드: 눌렀다 떼면(click) 흔들 준비
   e.preventDefault();
   try { act.setPointerCapture(e.pointerId); } catch {}
   startHold();
 });
-act.addEventListener("pointerup", endHold);
-act.addEventListener("pointercancel", endHold);
+act.addEventListener("pointerup", () => { if (hold && !hold.shake) endHold(); });
+act.addEventListener("pointercancel", () => { if (hold && !hold.shake) endHold(); });
 act.addEventListener("contextmenu", e => e.preventDefault());
 act.addEventListener("click", () => {
+  if (G && shakeMode() && !shake.fallback && G.throwsLeft > 0 && myTurn() && !shake.armed && !ui.busy && !proc) return armShake();
   if (G && amRemote() && G.throwsLeft <= 0 && !G.over && !ui.busy && !proc) return autoMoveForReferee();
   if (!G || !canMove()) return;
   if (ui.group !== null) doMove(ui.sel, ui.group);
@@ -1841,6 +1910,7 @@ $("#menuBtn").onclick = () => {
     openSheet(`<div class="sheet"><h3>메뉴</h3>
       ${amRemote() ? `<button class="row-btn" data-act="lobby">👥 게임 그만하고 팀 다시 정하기</button>` : ""}
       <button class="row-btn" data-act="sound">${sound ? "🔊 효과음 끄기" : "🔈 효과음 켜기"}</button>
+      ${amTVScreen() ? "" : `<button class="row-btn" data-act="throw">${shakeMode() ? "👆 버튼으로 던지기로 바꾸기" : "📳 휴대폰 흔들어 던지기로 바꾸기"}</button>`}
       <button class="row-btn" data-act="rules">📜 규칙 보기</button>
       <button class="row-btn" data-act="leave">🚪 ${amTVScreen() ? "TV 화면 그만하기" : "리모컨 그만하기"}</button>
       <button class="ghost-btn" data-act="close">닫기</button></div>`);
@@ -1849,6 +1919,7 @@ $("#menuBtn").onclick = () => {
       if (!a) return;
       if (a === "close") closeSheet();
       if (a === "sound") { sound = !sound; store.set("yutol.sound", sound); closeSheet(); }
+      if (a === "throw") { closeSheet(); setThrowMode(shakeMode() ? "button" : "shake"); toast(shakeMode() ? "📳 이제 휴대폰을 흔들어서 던져요" : "👆 이제 버튼으로 던져요"); }
       if (a === "rules") showRules();
       if (a === "lobby" && confirm("지금 판을 끝내고 팀을 다시 정할까요?")) { closeSheet(); await db.update(R(""), { "meta/status": "lobby", game: null, live: null }); }
       if (a === "leave" && confirm(amTVScreen() ? "TV 화면을 그만할까요? 방이 닫혀요." : "리모컨을 그만할까요?")) leaveRoom();
@@ -1859,6 +1930,7 @@ $("#menuBtn").onclick = () => {
     <button class="row-btn" data-act="invite">📨 초대 링크 보내기 (${room.code}번 방)</button>
     ${isHost() ? `<button class="row-btn" data-act="lobby">🏠 게임 그만하고 대기실로</button>` : ""}
     <button class="row-btn" data-act="sound">${sound ? "🔊 효과음 끄기" : "🔈 효과음 켜기"}</button>
+    <button class="row-btn" data-act="throw">${shakeMode() ? "👆 버튼으로 던지기로 바꾸기" : "📳 휴대폰 흔들어 던지기로 바꾸기"}</button>
     <button class="row-btn" data-act="rules">📜 규칙 보기</button>
     <button class="row-btn" data-act="leave">🚪 방 나가기</button>
     <button class="ghost-btn" data-act="close">닫기</button></div>`);
@@ -1868,6 +1940,7 @@ $("#menuBtn").onclick = () => {
     if (a === "close") closeSheet();
     if (a === "invite") { closeSheet(); invite(); }
     if (a === "sound") { sound = !sound; store.set("yutol.sound", sound); closeSheet(); }
+    if (a === "throw") { closeSheet(); setThrowMode(shakeMode() ? "button" : "shake"); toast(shakeMode() ? "📳 이제 휴대폰을 흔들어서 던져요" : "👆 이제 버튼으로 던져요"); }
     if (a === "rules") showRules();
     if (a === "lobby" && confirm("모두 대기실로 돌아갈까요? 지금 판은 끝나요.")) { closeSheet(); await db.update(R(""), { "meta/status": "lobby", game: null, live: null }); }
     if (a === "leave" && confirm("방에서 나갈까요?")) leaveRoom();
@@ -1968,7 +2041,7 @@ setInterval(async () => {
 // 접속 상태가 바뀌면(누가 나가고 들어오면) 담당이 바뀔 수 있으니 다시 살핀다
 setInterval(() => { if (G && room.meta && room.meta.status === "playing" && !proc && !ui.busy) afterView(); }, 5000);
 
-window.__yut = { get G() { return G; }, room, me, ui, get db() { return db; }, commit, applyThrow, applyMove, controller };
+window.__yut = { get G() { return G; }, room, me, ui, get db() { return db; }, commit, applyThrow, applyMove, controller, shake, setThrowMode };
 boot();
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
   addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
