@@ -331,7 +331,8 @@
   body.remote .mat { padding-bottom: 22px; }
   body.remote .sticks { height: 150px; }
   body.remote .stick { width: 38px; height: 136px; }
-  body.remote .hold-btn { height: 96px; font-size: 30px; }
+  body.remote .hold-btn { height: 96px; font-size: 30px; line-height: 1.15; }
+  #actBtn small { display: block; font-size: 16px; opacity: .75; margin-top: 2px; }
   body.tvscreen .mat .msg { font-size: 22px; color: #fff; min-height: 34px; }
   .notice { background: #FFF1DA; border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; font-size: 16px; }
 
@@ -609,7 +610,7 @@ const audioOn = () => !!actx && actx.state === "running";
 // 화면 어디든 누르면 소리를 켠다 (아이폰·아이패드는 한 번 눌러야 소리가 남)
 document.addEventListener("pointerdown", () => { const was = audioOn(); ensureAudio(); if (!was) setTimeout(() => { if (audioOn()) document.querySelectorAll(".sound-hint").forEach(e => e.remove()); }, 200); }, true);
 // 앱 버전: 같은 방의 기기끼리 버전이 다르면 오래된 쪽이 새로 고친다
-const APP_VER = 10;
+const APP_VER = 11;
 function tone(freq, dur, type = "sine", vol = .15, when = 0) {
   if (!sound) return;
   try {
@@ -1570,7 +1571,7 @@ function render(keepMsg) {
     else if (isTV() && !mine && !c.ai) setMsg(G.throwsLeft > 0
       ? (room.live.hold ? `<b>${esc(T.name)}</b> 팀이 바늘을 보고 있어요!` : `📱 휴대폰을 <b>${esc(T.name)}</b> 팀에게 넘겨 주세요`)
       : `<b>${esc(T.name)}</b> 팀이 말을 고르고 있어요…`);
-    else if (amRemote() && G.throwsLeft <= 0) setMsg("📱 휴대폰을 다음 팀에 넘겨 주세요 · 말은 심판(태블릿)이 움직여요");
+    else if (amRemote() && G.throwsLeft <= 0) setMsg("📱 휴대폰을 다음 팀에 넘겨 주세요<br><small style=\"opacity:.8\">말은 심판(태블릿)이 움직여요</small>");
     else if (amTVScreen() && G.throwsLeft <= 0 && ui.group === null) setMsg(`<b>${esc(T.name)}</b> 팀 말을 골라 움직여 주세요`);
     else if (isTV() && mine && G.throwsLeft > 0 && !G.results.length) setMsg(`<b>${esc(T.name)}</b> 팀 차례! 버튼을 누르고 있다가 바늘이 원하는 칸에 오면 떼세요`);
     else if (c.waiting) setMsg(`<b>${esc(T.name)}</b> 팀이 다시 들어오길 기다리는 중… 조금 뒤엔 컴퓨터가 대신해요`);
@@ -1582,7 +1583,7 @@ function render(keepMsg) {
     else if (ui.group === null) setMsg(G.results.length > 1 ? "쓸 결과를 고르고, 판에서 움직일 말을 누르세요" : "판에서 움직일 말을 누르세요");
     else setMsg(choices.length > 1 ? "표시된 곳으로 갈까요? 다른 말을 눌러 바꿀 수도 있어요" : "표시된 곳으로 갈까요?");
   }
-  if (amRemote() && G.throwsLeft <= 0 && !G.over) { btn.textContent = "🤖 알아서 움직이기 (심판 대신)"; btn.disabled = ui.busy || proc; btn.classList.add("hold-btn"); }
+  if (amRemote() && G.throwsLeft <= 0 && !G.over) { btn.innerHTML = "🤖 알아서 움직이기<small>심판 대신</small>"; btn.disabled = ui.busy || proc; btn.classList.add("hold-btn"); }
   else if (!mine) { btn.textContent = amWatch ? "관전 중" : G.over ? "끝!" : `${c.ai ? "컴퓨터" : whoName || "상대"} 차례예요`; btn.disabled = true; }
   else if (G.throwsLeft > 0) { if (!hold) btn.textContent = G.results.length ? "꾹 눌러서 한 번 더" : "꾹 눌러서 던지기"; btn.disabled = ui.busy || proc; }
   else if (ui.group !== null) { btn.textContent = "이동하기"; btn.disabled = ui.busy || proc; btn.classList.add("jade"); }
